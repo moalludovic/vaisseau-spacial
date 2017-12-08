@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<title>WebGL - Sphères, cylindres et modèle de Phong</title>
+
+
+<script type="x-shader/x-vertex" id="vertex-shader">
+    attribute  vec3 vcoords;
+    //attribute  vec4 vColor;//uniform
+    
+    varying vec4 fColor;
+    varying vec2 fTexCoord;
+    
+    uniform mat4 modelview;
+    uniform mat4 projection;
+    uniform vec4 vColor;
+    
+    void main() 
+    {
+        vec4 eyeCoords = modelview * vec4(vcoords,1.0);
+        gl_Position = projection * eyeCoords;
+        fColor = vec4(vColor);
+    } 
+</script>
+
+<script type="x-shader/x-fragment" id="fragment-shader">
+    precision mediump float;
+
+    varying vec4 fColor;
+    void
+    main()
+    {
+        gl_FragColor = fColor;
+    }
+</script>
+
+<script type="x-shader/x-vertex" id="vshader">
+     uniform mat4 projection;
+     uniform mat4 modelview;
+     uniform mat4 initialModelview;
+     uniform vec4 lightPosition;
+     uniform mat3 normalMatrix;
+     uniform vec3 scale;
+
+     attribute vec3 vcoords;
+     attribute vec3 vnormal;
+     attribute vec2 vtexcoord;
+
+     varying vec3 fN, fL, fE;
+     varying vec3 fviewCoords;
+     varying vec2 fTexCoord;
+
+     void main() {
+        vec4 eyeCoords = modelview * vec4(vcoords,1.0);
+        gl_Position = projection * eyeCoords;
+        vec3 pos = eyeCoords.xyz;
+        
+		vec3 light = (initialModelview*lightPosition).xyz;//fait bouger
+          // Now compute vectors L, E and N.
+          // Note that N is affected by the 
+          // transformations applied.
+          vec3 vnormal = vnormal;
+        if(scale.x!=0.0){
+          vnormal.x=(vnormal[0]/scale[0]);
+        }
+        if(scale.y!=0.0){
+          vnormal.y=(vnormal[1]/scale[1]);
+        }
+        if(scale.z!=0.0){
+          vnormal.z=(vnormal[2]/scale[2]);
+        }
+
+        fL = normalize( light - pos );
+        fE = normalize(-pos);
+        fN = normalMatrix * normalize(vnormal);
+
+  
+        fviewCoords = eyeCoords.xyz;
+        fTexCoord = vtexcoord;
+     }
+</script>
+
+<script type="x-shader/x-fragment" id="fshader">
+     precision mediump float;
+
+     uniform vec4 ambientProduct;
+     uniform vec4 diffuseProduct;
+     uniform vec4 specularProduct;
+     uniform float shininess;
+
+     varying vec3 fN, fL, fE;
+     varying vec3 fviewCoords;
+     varying vec2 fTexCoord;
+
+     uniform sampler2D texture;
+     uniform float alpha;
+
+     void main() {
+
+          vec4 Color;
+    
+          vec3 H = normalize( fL + fE );
+          vec4 ambient = ambientProduct;
+ 
+          float factorLN = max( dot(fL, fN), 0.0 );
+          vec4  diffuse = factorLN*diffuseProduct;
+
+          float factorNH = pow( max(dot(fN, H), 0.0), shininess );
+          vec4  specular = factorNH * specularProduct;
+    
+          if( dot(fL, fN) < 0.0 )
+              specular = vec4(0.0, 0.0, 0.0, 1.0);
+
+          Color = ambient + diffuse + specular;
+          Color.a = 1.0;
+
+          //gl_FragColor = texture2D( texture, fTexCoord );
+          vec4 textureColor = Color * texture2D( texture, fTexCoord );
+          gl_FragColor = vec4(textureColor.rgb, textureColor.a * alpha);
+
+     }
+</script>
+
+<script type="x-shader/x-vertex" id="vshadermap">
+     uniform mat4 projection;
+     uniform mat4 modelview;
+
+     attribute vec3 vcoords;
+     attribute vec3 vnormal;
+     attribute  vec2 vtexcoord;
+
+     varying vec3 fviewCoords;
+     varying vec3 fNormal;//
+
+     void main() {
+        vec2 tmp = vtexcoord;
+      // inserted only to map texcoord in this shader (required
+      // since models uses texture coordinates even though we will 
+      // not use them in environmental mapping)
+
+        vec4 eyeCoords = modelview * vec4(vcoords,1.0);
+        gl_Position = projection * eyeCoords;
+        fviewCoords = eyeCoords.xyz;
+        fNormal = vnormal;
+     }
+</script>
+
+<script type="x-shader/x-fragment" id="fshadermap">
+     precision mediump float;
+
+     varying vec3 fNormal;
+     varying vec3 fviewCoords;
+
+     uniform samplerCube skybox;
+     uniform mat3 normalMatrix;
+     uniform mat3 minv;
+
+     void main() {
+          vec3 N = normalMatrix * fNormal;
+          vec3 V = -fviewCoords;
+          vec3 R = -reflect(V,N);
+      // alternative way of computing the reflected ray
+      //          vec3 R = 2.0 * dot(V,N) * N - V; 
+      
+      // Transform by inverse of view transform, which was applied to the skybox
+          R = minv * R;
+
+          gl_FragColor = textureCube(skybox, R);
+     }
+</script>
+
+<script type="x-shader/x-vertex" id="vshaderbox">
+    uniform mat4 projection;
+    uniform mat4 modelview;
+
+    attribute vec3 vcoords;
+    attribute vec3 vnormal;
+    attribute vec2 vtexcoord;
+
+    varying vec3 fCoords;
+
+    void main() {
+       vec2 tmp = vtexcoord;
+       vec3 tmp2 = vnormal;
+   	// inserted only to map texcoord and normal in this shader 
+   	// (required since models uses texture coordinates even though 
+   	//   we will not use them in this shader)
+
+       vec4 eyeCoords = modelview * vec4(vcoords,1.0);
+        gl_Position = projection * eyeCoords;
+        fCoords = vcoords;  // les sommets du cube positionnés à -500 ou +500, 
+		                    // on devrait ici diviser par 500 mais textureCube() s'en accommode !!!
+    }
+</script>
+
+<script type="x-shader/x-fragment" id="fshaderbox">
+     precision mediump float;
+
+     varying vec3 fCoords;
+
+     uniform samplerCube skybox;
+
+     void main() {
+          gl_FragColor = textureCube(skybox, fCoords);
+     }
+</script>
+
+<script type="text/javascript" src="WebGL%20-%20Sph%C3%A8res,%20cylindres%20et%20mod%C3%A8le%20de%20Phong_fichiers/simple-rotator.js"></script>
+<script type="text/javascript" src="WebGL%20-%20Sph%C3%A8res,%20cylindres%20et%20mod%C3%A8le%20de%20Phong_fichiers/basic-objects-IFS.js"></script>
+<script type="text/javascript" src="WebGL%20-%20Sph%C3%A8res,%20cylindres%20et%20mod%C3%A8le%20de%20Phong_fichiers/MV.js"></script>
+<script type="text/javascript" src="WebGL%20-%20Sph%C3%A8res,%20cylindres%20et%20mod%C3%A8le%20de%20Phong_fichiers/spherecylinder.js"></script>
+
+</head><body><div id="slider0">
+wings angle Up <input id="slide" min="-50" max="50" step="5" value="0" type="range">
+Down
+</div><br>
+
+</head><body><div id="slider1">
+plates angle Open <input id="slide" min="5" max="165" step="10" value="85" type="range">
+ Close
+</div><br>
+
+</head>
+<body style="background-color:#DDD">
+
+
+<noscript><hr><h3>This page requires Javascript and a web browser that supports WebGL</h3><hr></noscript>
+
+
+<div>
+
+    <canvas id="glcanvas" width="600" height="600"></canvas>
+
+</div>
+
+
+</body></html>
